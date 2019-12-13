@@ -3,16 +3,15 @@
   using Kami.
 *)
 
-Require Import All.
-Require Import List.
+Require Import Kami.AllNotations.
 Require Import ZArith.
+Require Import List.
 Import ListNotations.
 
 Open Scope list_scope.
 Open Scope kami_scope.
 Open Scope kami_action_scope.
 Open Scope kami_expr_scope.
-
 
 (**
   An example packet structure type.
