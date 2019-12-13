@@ -18,7 +18,7 @@ Open Scope kami_expr_scope.
 *)
 Example packet_type
   :  Kind
-  := STRUCT {"field" :: Bit 4}.
+  := STRUCT_TYPE {"field" :: Bit 4}.
 
 (**
   An example packet structure.
@@ -37,20 +37,27 @@ Example packet
 Check (ReadStruct packet Fin.F1).
 Check (packet @% "field").
 
+Example register0_value
+  :  RegT
+  := ("register0",
+      existT (fullType type)
+        (SyntaxKind (Bit 32))
+        (natToWord 32 4)).
+
 (**
   Represents a 32-bit register with an initial
   state containing the value 4.
 *)
 Example register0 : RegInitT
   := ("register0",
-       existT optConstFullT
+       existT RegInitValT
          (SyntaxKind (Bit 32))
          (Some (SyntaxConst (ConstBit $4)))).
 
 (**  Represents an uninitialized 16-bit register. *)
 Example register1 : RegInitT
   := ("register1",
-       existT optConstFullT
+       existT RegInitValT
          (SyntaxKind (Bit 16))
          None).
 
@@ -129,15 +136,6 @@ Example module0 : Mod
 Example module1 : Mod
   := Base (BaseMod [register1] [rule0] []).
      
-(**
-  Represents a register file containing two 4 bit registers initialized to the value 8.
-*)
-Example register_file0
-  := RegFile
-       "register_file0"
-       ["read0" ; "read1" ; "read2"]
-       "write0" 2 (Some (ConstBit WO~1~0~0~0)).
-
 (**
   An example base module illustrating Kami's
   module notation.
@@ -514,15 +512,89 @@ Example rule_step
   a method where the method was executed in
   response to an external call.
 *)
-Example method_step
-  :  Step
-       (Base (BaseMod [] [] [method1]))
-       []
-       [([], (Meth ("method1", existT SignT (Void, Void) (WO, WO)), []))]
-  := BaseStep
-       method_substep
-       (fun method (H : In (fst method) ["method1"])
-         => num_method_execs_positive method
-              [([], (Meth ("method1", existT SignT (Void, Void) (WO, WO)), []))]).
+Section method_step.
 
+  Local Definition method_name : MethT -> string := fst.
+
+  Local Definition method_res : MethT -> {sig : (Kind * Kind) & SignT sig} := snd. 
+
+  Local Definition method_sig (method : MethT) : Kind * Kind := projT1 (snd method).
+
+  Local Definition method_name_sig (method : MethT)
+    :  string * (Kind * Kind)
+    := (method_name method, method_sig method).
+
+  Local Definition example_method
+    :  MethT
+    := ("method1", existT SignT (Void, Void) (WO, WO)).
+
+  Local Definition example_method_name : string := fst example_method.
+
+  Local Definition example_method_res
+    :  {sig : (Kind * Kind) & SignT sig} 
+    := method_res example_method.
+
+  Local Definition example_method_sig
+    :  Kind * Kind
+    := method_sig example_method.
+
+  Local Definition example_method_name_sig
+    :  (string * (Kind * Kind))
+    := (example_method_name, example_method_sig).
+
+  Local Definition label
+    :  FullLabel
+    := ([], (Meth example_method, [])).
+
+  Example method_step
+    :  Step
+         (Base (BaseMod [] [] [method1]))
+         []
+         [label]
+    := BaseStep
+         method_substep
+         (fun method (H : In (method_name_sig method) [example_method_name_sig])
+           => num_method_execs_positive method
+                [label]
+           : (0 <= getNumExecs method [label])%Z).
+
+End method_step.
+
+(*
+  An example initial trace for the null module.
+  Essentially we show that the initial register state must be empty
+  for the null module.
+*)
+Example null_module_init_trace
+  :  Trace null_module [] []
+  := InitTrace null_module (Forall2_nil _) (eq_refl []).
+
+Definition reg_init_kind (reg : RegInitT) : FullKind := projT1 (snd reg).
+
+Definition reg_kind (reg : RegT) : FullKind := projT1 (snd reg).
+
+(*
+  An example initial trace for a module that has only one register.
+*)
+Example module0_init_trace
+  :  Trace module0 [register0_value] []
+  := InitTrace module0
+       (Forall2_cons register0_value register0
+         (conj
+           (eq_refl "register0")
+           (ex_intro
+             (fun H : reg_kind register0_value = reg_init_kind register0
+               (* prove that the init value is valid. *)
+               => match projT2 (snd register0) with
+                  | Some init_value
+                    => match H in (_ = init_kind) return (fullType type init_kind) with
+                       | eq_refl
+                         => projT2 (snd register0_value)
+                       end = evalConstFullT init_value
+                  | None => True
+                  end)
+             (eq_refl (SyntaxKind (Bit 32)))
+             (eq_refl (natToWord 32 4))))
+         (Forall2_nil _))
+       (eq_refl []).
 
