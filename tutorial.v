@@ -37,12 +37,21 @@ Example packet
 Check (ReadStruct packet Fin.F1).
 Check (packet @% "field").
 
+(* Represents the state of a 32 bit register. *)
 Example register0_value
   :  RegT
   := ("register0",
       existT (fullType type)
         (SyntaxKind (Bit 32))
         (natToWord 32 4)).
+
+(* Represents the state of a 16 bit register. *)
+Example register1_value
+  :  RegT
+  := ("register1",
+      existT (fullType type)
+        (SyntaxKind (Bit 16))
+        (natToWord 16 3)). 
 
 (**
   Represents a 32-bit register with an initial
@@ -133,8 +142,9 @@ Example module0 : Mod
   This module repeatedly executes rule0 which
   does nothing.
 *)
-Example module1 : Mod
-  := Base (BaseMod [register1] [rule0] []).
+Example base_module1 : BaseModule := BaseMod [register1] [rule0] [].
+
+Example module1 : Mod := Base base_module1.
      
 (**
   An example base module illustrating Kami's
@@ -363,14 +373,14 @@ Example example_substep
   Represents a substep in which a void return
   rule named "rule0" is executed.
 *)
-Example rule_substep 
+Example module1_substep 
   :  Substeps
-       (BaseMod [] [rule0] [])
-       []
+       base_module1
+       [register1_value]
        [([], (Rle "rule0", []))]
   := AddRule
-       (m := BaseMod [] [rule0] [])
-       (o := [])
+       (m := base_module1)
+       (o := [register1_value])
        (* prove that the register types in the initial register state agree with the module definitions *)
        (ltac:(trivial))
        (* the rule body *)
@@ -378,7 +388,12 @@ Example rule_substep
        (* prove that the rule is defined by the module *)
        (ltac:(left; exact (eq_refl ("rule0", fun type => Ret Const type WO))))
        (* prove that the rule body produces the given register updates, method calls, and method executions *)
-       (void_return_effect [])
+       (* (void_return_effect []) *)
+       (SemReturn
+         [register1_value] (Const type WO) (eq_refl WO)
+         (eq_refl [])      (* the return action does not read any registers *)
+         (eq_refl [])      (* the return action does not update any registers *)
+         (eq_refl []))     (* the return action does not call any registers *)
        (* proves that the types given for the register reads agree with the module definitions. *)
        (fun read (H : In read nil) => ltac:(contradiction))
        (* proves that the types given for the register writes agree with the module definitions. *)
@@ -395,10 +410,9 @@ Example rule_substep
        (fun label (H : In label nil) => ltac:(contradiction))
        (* prove that the remaining substeps are valid *)
        (NilSubstep
-         (BaseMod [] [rule0] [])
-         []
+         base_module1
+         [register1_value]
          (ltac:(trivial))).
-
 
 (**
   Represents a singleton substep in which a void
@@ -496,14 +510,17 @@ Example rule2_substep
   Note: this rule is simply a substep in which
   we've verified that the number of calls is less
   than the number of executions for each method.
+
+  Note: we give the resulting register state and
+  label.
 *)
-Example rule_step
+Example module1_step
   : Step
-      (Base (BaseMod [] [rule0] []))
-      []
+      base_module1
+      [register1_value]
       [([], (Rle "rule0", []))]
   := BaseStep
-       rule_substep
+       module1_substep
        (fun method (H : In (fst method) nil)
          => ltac:(contradiction)).
 
@@ -562,12 +579,14 @@ End method_step.
 
 (*
   An example initial trace for the null module.
-  Essentially we show that the initial register state must be empty
-  for the null module.
+
+  Note: Essentially we show that the initial register state must
+  be empty for the null module.
 *)
 Example null_module_init_trace
   :  Trace null_module [] []
   := InitTrace null_module (Forall2_nil _) (eq_refl []).
+
 
 Definition reg_init_kind (reg : RegInitT) : FullKind := projT1 (snd reg).
 
@@ -575,6 +594,10 @@ Definition reg_kind (reg : RegT) : FullKind := projT1 (snd reg).
 
 (*
   An example initial trace for a module that has only one register.
+
+  Note that we must prove that the initial value assigned to
+  the module's register is valid - i.e. that if the register is
+  initialized, the initial value equals the initialization value.
 *)
 Example module0_init_trace
   :  Trace module0 [register0_value] []
@@ -598,3 +621,47 @@ Example module0_init_trace
          (Forall2_nil _))
        (eq_refl []).
 
+(*
+  An example initial trace in which an uninitiaized register is
+  assigned a starting value.
+*)
+Example module1_init_trace
+  :  Trace module1 [register1_value] []
+  := InitTrace module1
+       (Forall2_cons register1_value register1
+         (conj
+           (eq_refl "register1")
+           (ex_intro _
+             (eq_refl (SyntaxKind (Bit 16)))
+             I)) (* no check on the initial value. *)
+         (Forall2_nil _))
+       (eq_refl []).
+
+(*
+Section module1_trace.
+  Local Definition label
+    :  FullLabel
+    := ([], (Rle "rule0", [])).
+
+  Example module1_trace
+    :  Trace module0 [register0_value] [label]
+    := ContinueTrace
+         module1_init_trace
+         module1_step
+         (let reg_updates
+            :  list RegsT
+            := map fst label in
+          (conj
+            eq_refl (* the current and next register states have the same names and kinds *)
+            (* prove that the register updates in the label are valid. *)
+            (fun update_reg_name update_reg_value
+              (H : In (update_reg_name, update_reg_value) [register0_value]
+              => conj
+                   (or_intror _
+                     (False_ind _
+                       (ex_ind
+                         (fun (updates : RegsT) (Hupdates : In updates 
+
+                    (* prove that every update is in 
+End module1_trace.
+*)
