@@ -131,8 +131,9 @@ Example null_module : Mod := Base null_base_module.
   This module repeatedly writes the value 5
   into register0.
 *)
-Example module0 : Mod
-  := Base (BaseMod [register0] [rule1] [method0]).
+Example base_module0 : BaseModule := BaseMod [register0] [rule1] [method0].
+
+Example module0 : Mod := Base base_module0.
 
 (**
   Represents a module that contains register1,
@@ -356,7 +357,7 @@ Example null_substep
 (**
   Labels
 
-  A label is represented by terms of type FullLabel and are
+  labels are represented by terms of type FullLabel and are
   effectively tuples of the form (u, r, cs), where u denotes a set
   of register updates; r, represents an optional rule name; and cs,
   denotes a set of method calls.
@@ -494,8 +495,58 @@ Example method_substep
          []
          (eq_refl [])).
 
-(**
-*)
+Example module0_reg_decls
+  := [("register0", SyntaxKind (Bit 32))].
+
+Example rule1_reg_res
+  :  RegT
+  := ("register0",
+      existT (fullType type)
+        (SyntaxKind (Bit 32))
+        (natToWord 32 5)).
+
+Example rule1_substep_label
+  :  FullLabel
+  := ([rule1_reg_res], (Rle "rule1", [])).
+
+(** An example substep that updates a register. *)
+Example rule1_substep
+  :  Substeps
+       base_module0
+       [register0_value]
+       [rule1_substep_label]
+  := AddRule
+      (m := base_module0)
+      (* initial register state *)
+      (o := [register0_value])
+      (* prove that the register types in the initial register state agree with the module definitions. *)
+      eq_refl
+      (* the rule body. *)
+      (snd rule1)
+      (* prove that the rule is defined by the module. *)
+      (or_introl (eq_refl rule1))
+       (* prove that the rule body produces the given register writes, method calls, and return value (void). *)
+      (ltac:(discharge_SemAction)
+        : SemAction [register0_value] (snd rule1 type) [] 
+            [rule1_reg_res] [] WO)
+      (* prove that the types given for register reads agree with the module definitions. *)
+      (fun label (H : In label []) => False_ind _ H)
+      (* prove that the types given for register writes agree with the module definitions. *)
+      (fun reg
+        => or_ind
+             (fun Hreg : ("register0", SyntaxKind (Bit 32)) = reg
+               => or_introl _ Hreg)
+             (fun Hreg : In reg []
+               => False_ind _ Hreg))
+      (eq_refl [rule1_substep_label])
+      (* prove that none of the other rules and methods update the any of the same registers as this rule. *)
+      (fun label (H : In label []) => False_ind _ H) (* discharge_DisjKey *)
+      (* prove that none of the remaining labels are rule executions. *)
+      (fun label (H : In label []) => False_ind _ H)
+      (* prove that the remaining substeps are valid *)
+      (NilSubstep base_module0 [register0_value] eq_refl).
+
+(** An example substep that performs a method call. *)
 Example rule2_substep
   :  Substeps
        (BaseMod [] [rule2] []) 
