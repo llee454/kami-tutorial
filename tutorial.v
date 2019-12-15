@@ -540,9 +540,9 @@ Example rule1_substep
                => False_ind _ Hreg))
       (eq_refl [rule1_substep_label])
       (* prove that none of the other rules and methods update the any of the same registers as this rule. *)
-      (fun label (H : In label []) => False_ind _ H) (* discharge_DisjKey *)
+      (fun label (H : In label []) => ltac:(contradiction)) (* generally: discharge_DisjKey *)
       (* prove that none of the remaining labels are rule executions. *)
-      (fun label (H : In label []) => False_ind _ H)
+      (fun label (H : In label []) => ltac:(contradiction))
       (* prove that the remaining substeps are valid *)
       (NilSubstep base_module0 [register0_value] eq_refl).
 
@@ -616,22 +616,22 @@ Example module1_step
        (fun method (H : In (fst method) nil)
          => ltac:(contradiction)).
 
+Definition method_name : MethT -> string := fst.
+
+Definition method_res : MethT -> {sig : (Kind * Kind) & SignT sig} := snd. 
+
+Definition method_sig (method : MethT) : Kind * Kind := projT1 (snd method).
+
+Definition method_name_sig (method : MethT)
+  :  string * (Kind * Kind)
+  := (method_name method, method_sig method).
+
 (*
   An example step for a module that contains
   a method where the method was executed in
   response to an external call.
 *)
 Section method_step.
-
-  Local Definition method_name : MethT -> string := fst.
-
-  Local Definition method_res : MethT -> {sig : (Kind * Kind) & SignT sig} := snd. 
-
-  Local Definition method_sig (method : MethT) : Kind * Kind := projT1 (snd method).
-
-  Local Definition method_name_sig (method : MethT)
-    :  string * (Kind * Kind)
-    := (method_name method, method_sig method).
 
   Local Definition example_method
     :  MethT
@@ -662,12 +662,27 @@ Section method_step.
          [label]
     := BaseStep
          method_substep
+         (* prove that the number of times each method is called is less than, or equal to, the number of times it's executed. *)
          (fun method (H : In (method_name_sig method) [example_method_name_sig])
-           => num_method_execs_positive method
-                [label]
+           => num_method_execs_positive method [label]
            : (0 <= getNumExecs method [label])%Z).
 
 End method_step.
+
+(**
+  An example step representing a rule that updates a register.
+*)
+Example rule1_step
+  :  Step
+       module0
+       [register0_value]
+       [rule1_substep_label]
+  := BaseStep
+      rule1_substep
+      (* prove that the number of times each method is called is less than, or equal to, the number of times it's executed. *)
+      (fun method (H : In (method_name_sig method) [("method0", (Bit 16, Bit 16))])
+        => num_method_execs_positive method [rule1_substep_label]
+        : (0 <= getNumExecs method [rule1_substep_label])%Z).
 
 (*
   An example initial trace for the null module.
@@ -713,6 +728,37 @@ Example module0_init_trace
          (Forall2_nil _))
        (eq_refl []).
 
+(**
+  An example trace representing the execution of a single rule that
+  performs a register write.
+*)
+Example module0_trace
+  :  Trace module0 [rule1_reg_res] [[rule1_substep_label]]
+  := ContinueTrace
+       (* initial register values. *)
+       (o := [register0_value])
+       (* resulting register values. *)
+       (o' := [rule1_reg_res])
+       module0_init_trace
+       rule1_step
+       (*
+         prove that the register updates are valid - i.e. the
+         resulting register values are the same as the register
+         values at the end of the previous cycle; or ...
+       *)
+       (conj
+         (* prove that the current and next register states have the same names and kinds *)
+         eq_refl
+         (* prove that the resulting register values are the result of the last step label's updates. *)
+         (fun next_reg_name next_reg_value H
+           => or_introl _
+                (ex_intro _
+                  [rule1_reg_res]
+                  (conj
+                    (or_introl (eq_refl [rule1_reg_res]))
+                    H))))
+       eq_refl.
+
 (*
   An example initial trace in which an uninitiaized register is
   assigned a starting value.
@@ -736,7 +782,7 @@ Section module1_trace.
     :  FullLabel
     := ([], (Rle "rule0", [])).
 
-  Example module0_trace
+  Example module1_trace
     :  Trace module1 [register1_value] [[module1_trace_label]]
     := ContinueTrace
          module1_init_trace
