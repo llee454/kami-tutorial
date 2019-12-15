@@ -821,6 +821,30 @@ Section module1_trace.
 End module1_trace.
 
 (**
+  An example that demonstrates that the trace inclusion property
+  is reflective.
+
+  Note: we could have proved this using [TraceInclusion_refl].
+*)
+Example module1_trace_incl_refl
+  :  TraceInclusion module1 module1
+  := fun init_regs labels (H : Trace module1 init_regs labels)
+      => ex_intro _
+           init_regs
+           (ex_intro _
+             labels
+             (conj H
+               (conj eq_refl
+                 (list_ind
+                   (fun ls => nthProp2 WeakInclusion ls ls)
+                   (nat_ind _ I (fun _ _ => I))
+                   (fun l0 ls (F : nthProp2 WeakInclusion ls ls)
+                     => nat_ind _
+                          (WeakInclusionRefl l0)
+                          (fun n _ => (F n)))
+                   labels)))).
+
+(**
   The simulation theorem accepts two modules, [impl] and [spec],
   where [spec] represents a transparently correct implementation
   of some algorithm and [impl] represents some sophisticated
