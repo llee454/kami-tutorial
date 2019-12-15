@@ -338,6 +338,20 @@ Example null_substep
   := NilSubstep null_base_module [] (eq_refl []).
 
 (**
+  Labels
+
+  A label is represented by terms of type FullLabel and are
+  effectively tuples of the form (u, r, cs), where u denotes a set
+  of register updates; r, represents an optional rule name; and cs,
+  denotes a set of method calls.
+
+  The semantics of a Kami step is represented by a list of
+  labels, where every label in the list represents the effects
+  (register updates, rule executions, and method calls) of a single
+  rule or method active during the step.
+*)
+
+(**
   Represents an example substep in which a void
   return rule named "rule0" is executed.
 *)
@@ -663,12 +677,17 @@ Section module1_trace.
          (conj
            eq_refl (* the current and next register states have the same names and kinds *)
            (fun (update_reg_name : string) update_reg_value
+             (* forall register states in the resulting register state *)
              (H : In (update_reg_name, update_reg_value) [register1_value])
              => (*
-                   prove that there are no updates and that the next
-                   register state equals the initial register state.
+                   In this example, we must prove that there are no
+                   updates and that the next register state equals
+                   the initial register state.
                 *)
-                or_intror _
+                or_intror
+                  (exists xs : RegsT,
+                    (In xs [[]] (* register states resulting from transition labels *) /\
+                     In (update_reg_name, update_reg_value) xs))
                   (conj
                     (ex_ind
                       (list_ind
