@@ -151,19 +151,18 @@ Example module1 : Mod := Base base_module1.
 *)
 Example module2 : BaseModule
   := MODULE {
-    (* represents a 16 bit register *)
-    Register "example_register" : Bit 16 <- getDefaultConst (Bit 16) 
+       (* represents a 16 bit register *)
+       Register "example_register" : Bit 16 <- getDefaultConst (Bit 16) 
 
-    (* represents a rule *)
-    with Rule "example_rule" := Retv
+       (* represents a rule *)
+       with Rule "example_rule" := Retv
 
-    (* represents a method *)
-    with Method "example_method" (x : Bit 8) : Void := Retv
-}.
+       (* represents a method *)
+       with Method "example_method" (x : Bit 8) : Void := Retv
+     }.
 
 (** Represents the return void action. *)
 Example void_action : ActionT type Void := Ret Const type WO.
-
 
 (** Represents the composition of two modules. *)
 Example composite_module : Mod := ConcatMod module0 module1.
@@ -252,6 +251,20 @@ Example example_method_call_event : MethT
   := ("example_method", existT SignT (Bit 0, Bit 8) (WO, natToWord 8 4)).
 
 (**
+  Actions:
+
+  The semantics of Kami actions are represented by SemAction terms,
+  which are essentially triples of the form: (initRegs, resRegs,
+  retVal), where initRegs represents the initial register state
+  before the action; resRegs, represents the resulting register
+  states after the action; and retVal, represents the value returned
+  by the action.
+
+  Given a Kami action, we could define a function that maps a set of
+  initial register values onto a pair of the form (resRegs, retVal).
+*)
+
+(**
   Proves that a void return action returns the
   initial register state without any register
   updates or method calls/executions and returns
@@ -287,7 +300,7 @@ Example method_call_effect
        (Const type WO)          (* the action's return value *)
        (fun _ : word 0 => Retv) (* the continuation after this call action. *)
        (eq_refl [("method", existT SignT (Void, Void) (WO, WO))]) (* the values passed to and returned by this method call. *)
-       (void_return_effect []).                            (* proves that the continuation produces the needed effect. *)
+       (void_return_effect []). (* proves that the continuation produces the needed effect. *)
 
 (**
   Illustrates the effects of writing a value to
@@ -302,7 +315,10 @@ Example write_effect
        []                                                                          (* the method calls/executions *)
        WO                                                                          (* the return value *)
   := SemWriteReg
+       (* the initial register state *)
        (o := [("register", existT (fullType type) (SyntaxKind (Bit 8)) (natToWord 8 5))])
+
+       (* the resulting register value *)
        (Const type (natToWord 8 6))
 
        (* prove that the correct type of value is stored. *)
@@ -310,7 +326,7 @@ Example write_effect
          (eq_refl ("register", SyntaxKind (Bit 8))))
 
        (* Prove that the register has only been written to once. *)
-       (fun value (H : In ("register", value) nil) => H)
+       (fun value (H : In ("register", value) []) => H)
 
        (* Prove that the value written equals the value stored. *)
        (eq_refl [("register", existT (fullType type) (SyntaxKind (Bit 8)) (natToWord 8 6))])
