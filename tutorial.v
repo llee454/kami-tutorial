@@ -32,7 +32,6 @@ Example packet
 
 (**
   An example reading a field value from a packet.
-
 *)
 Check (ReadStruct packet Fin.F1).
 Check (packet @% "field").
@@ -319,7 +318,19 @@ Example write_effect
        (* Prove that the return action has no further effect. *)
        (void_return_effect
          [("register", existT (fullType type) (SyntaxKind (Bit 8)) (natToWord 8 5))]).
-       
+  
+(*
+  Note: the discharge_SemAction tactic can be used to prove SemAction
+  relations.
+*)
+Example discharge_SemActionExample
+  :  SemAction
+       [("register", existT (fullType type) (SyntaxKind (Bit 8)) (natToWord 8 5))]
+       (Write "register" : Bit 8 <- $6; Retv)
+       []
+       [("register", existT (fullType type) (SyntaxKind (Bit 8)) (natToWord 8 6))]
+       [] WO
+  := ltac:(discharge_SemAction).
 
 (** Demonstrates the simplest possible substep. *)
 Example null_substep
@@ -637,31 +648,73 @@ Example module1_init_trace
          (Forall2_nil _))
        (eq_refl []).
 
-(*
+Close Scope kami_expr.
+
 Section module1_trace.
-  Local Definition label
+  Local Definition module1_trace_label
     :  FullLabel
     := ([], (Rle "rule0", [])).
 
-  Example module1_trace
-    :  Trace module0 [register0_value] [label]
+  Example module0_trace
+    :  Trace module1 [register1_value] [[module1_trace_label]]
     := ContinueTrace
          module1_init_trace
          module1_step
-         (let reg_updates
-            :  list RegsT
-            := map fst label in
-          (conj
-            eq_refl (* the current and next register states have the same names and kinds *)
-            (* prove that the register updates in the label are valid. *)
-            (fun update_reg_name update_reg_value
-              (H : In (update_reg_name, update_reg_value) [register0_value]
-              => conj
-                   (or_intror _
-                     (False_ind _
-                       (ex_ind
-                         (fun (updates : RegsT) (Hupdates : In updates 
+         (conj
+           eq_refl (* the current and next register states have the same names and kinds *)
+           (fun (update_reg_name : string) update_reg_value
+             (H : In (update_reg_name, update_reg_value) [register1_value])
+             => (*
+                   prove that there are no updates and that the next
+                   register state equals the initial register state.
+                *)
+                or_intror _
+                  (conj
+                    (ex_ind
+                      (list_ind
+                        (fun xs : RegsT
+                          => ~ (In xs (map fst [module1_trace_label]) /\
+                                In update_reg_name (map fst xs)))
+                        (fun Hxs => proj2 Hxs)
+                        (fun x0 xs Hxs Hx0
+                          => False_ind _
+                               (or_ind
+                                 (fun Hcontr : [] = x0 :: xs
+                                   => ltac:(discriminate Hcontr))
+                                 (fun Hcontr : False => Hcontr)
+                                 (proj1 Hx0)))))
+                    H)))
+         eq_refl.
 
-                    (* prove that every update is in 
 End module1_trace.
+
+(**
+  The simulation theorem accepts two modules, [impl] and [spec],
+  where [spec] represents a transparently correct implementation
+  of some algorithm and [impl] represents some sophisticated
+  implementation that we want to show is functionally equivalent to
+  [spec].
+
+  It takes a proof that both are well-formed. It takes a relation
+  between all of the registers in [impl] and [spec]. It accepts a
+  proof that this relation only holds when the two sets of registers
+  correspond to those in [spec] and [impl].
+
+  It accepts another proof that, forall initial register states in
+  [impl], the initial values are valid, and that there exists an
+  initial register state in [spec] that is also valid, and that
+  the simulation relation holds between the register in [impl]
+  and the corresponding register in [spec].
+
+  Then we prove that the simulation relation is preseved by every
+  rule in [impl]. That the simulation relation is preserved by
+  every method.
+
+  The next two clauses are unclear.
+
+  Then we show that forall initial register states and traces that
+  can be produced by [impl], there exists another initial register
+  state and trace that can be produced by [spec], such that the
+  length of the two traces are equal, and that the trace produced by
+  [impl] is weakly included in the trace produced by [spec].
 *)
