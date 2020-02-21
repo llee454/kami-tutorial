@@ -162,7 +162,11 @@ Example module2 : BaseModule
        with Method "example_method" (x : Bit 8) : Void := Retv
      }.
 
-(** Represents the return void action. *)
+(**
+  Represents the return void action.
+
+  Note: equivalent to Retv.
+*)
 Example void_action : ActionT type Void := Ret Const type WO.
 
 (** Represents the composition of two modules. *)
@@ -843,6 +847,31 @@ Example module1_trace_incl_refl
                           (WeakInclusionRefl l0)
                           (fun n _ => (F n)))
                    labels)))).
+
+(**
+  TODO: an example trace inclusion proof for two modules, [impl] and
+  [spec], where [impl] and [spec] implement a single shared rule and
+  [impl] implements and additional method.
+*)
+
+(**
+  Trace Inclusion:
+
+  Given two modules, [spec] and [impl], we say that [impl] <= [spec]
+  iff: for every [spec] trace, [spec_trace], there exists an [impl]
+  trace, [impl_trace], where the number of steps in [spec_trace] and
+  [impl_trace] are equal; and, for every step, for every method,
+  [meth], in [spec_trace] and [impl_trace] the difference in between
+  the number of times that [meth] is executed and the number of
+  times [meth] is called is equal in both [spec_trace] and
+  [impl_trace], and the same rules are executed in [spec_trace] and
+  [impl_trace].
+
+  The simplest way to prove trace inclusion is to define a function
+  that accepts a set of labels associated with a step in [spec]
+  and returns a set of labels associated with a step in [impl]
+  that satisfies the above constraints.
+*)
 
 (**
   The simulation theorem accepts two modules, [impl] and [spec],
