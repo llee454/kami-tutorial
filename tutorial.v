@@ -3,6 +3,7 @@
   using Kami.
 *)
 
+Require Import Kami.Syntax.
 Require Import Kami.AllNotations.
 Require Import ZArith.
 Require Import List.
@@ -174,9 +175,9 @@ Example composite_module : Mod := ConcatMod module0 module1.
 
 (** Proves that the return void action is well formed. *)
 Definition void_action_wellformed
-  :  forall module : BaseModule, WfActionT module void_action
+  :  forall module : BaseModule, WfActionT [] void_action
   := fun module
-       => WfReturn module (Const type (ConstBit WO)). 
+       => WfReturn [] (Const type (ConstBit WO)). 
 
 Opaque void_action_wellformed.
 
@@ -185,20 +186,19 @@ Opaque void_action_wellformed.
 *)
 Definition null_base_module_wellformed : WfBaseModule null_base_module
   := conj
-       (fun rule (H : In rule []) => False_ind _ H)
+       (fun ty rule (H : In rule []) => False_ind _ H)
        (conj
-         (fun method (H : In method []) => False_ind _ H)
+         (fun ty method (H : In method []) => False_ind _ H)
          (conj (NoDup_nil string)
            (conj (NoDup_nil string)
                  (NoDup_nil string)))).
 
 Opaque null_base_module_wellformed.
 
-(** Proves that the null module is well formed. *)
 Definition null_module_wellformed : WfMod null_module := BaseWf null_base_module_wellformed.
 
 (**
-  Represents the an action that a calls a void
+  Represents the action that a calls a void
   method and returns void.
 *)
 Example void_method_call : ActionT type Void
@@ -210,11 +210,11 @@ Example void_method_call : ActionT type Void
   well formed within any module.
 *)
 Definition void_method_call_wellformed
-  :  forall module : BaseModule, WfActionT module void_method_call
+  :  forall module : BaseModule, WfActionT [] void_method_call
   := fun module : BaseModule
        => WfMCall "example_method" (Void, Void) (Const type WO)
             (fun _ : word 0 => Ret Const type WO)
-            (fun _ : word 0 => WfReturn module (Const type WO)).
+            (fun _ : word 0 => WfReturn [] (Const type WO)).
 
 Opaque void_method_call_wellformed.
 
@@ -285,7 +285,7 @@ Example void_return_effect
             (eq_refl WO)      
             (eq_refl [])      (* the return action does not read any registers *)
             (eq_refl [])      (* the return action does not update any registers *)
-            (eq_refl []).     (* the return action does not call any registers *)
+            (eq_refl []).     (* the return action does not call any methods *)
 
 (**
   Demonstrates the mapping between a method
@@ -384,6 +384,7 @@ Example example_substep
        [([], (Rle "rule0", []))]
   := AddRule
        (m := BaseMod [register0] [rule0] [])
+       (* initial register state *)
        (o := [("register0", existT (fullType type) (SyntaxKind (Bit 32)) (natToWord 32 5))])
        (* prove that the register types in the initial register state agree with the module definitions. *)
        (eq_refl [("register0", SyntaxKind (Bit 32))])
@@ -405,7 +406,7 @@ Example example_substep
        (ls := [])
        (* prove that the first label contains an entry for this rule. *)
        (eq_refl [([], (Rle "rule0", []))])
-       (* *)
+      (* prove that none of the other rules and methods update the any of the same registers as this rule. *)
        (fun label (H : In label nil) _ => False_ind _ H)
        (* prove that none of the remaining labels are rule executions. *)
        (fun label (H : In label nil) => False_ind _ H)
@@ -468,7 +469,7 @@ Example method_substep
   :  Substeps
        (BaseMod [] [] [method1])
        [] (* no initial register states. *)
-       [([], (Meth ("method1", existT SignT (Void, Void) (WO, WO)), []))]
+       [([], (Meth ("method1", existT SignT (Void, Void) (WO, WO)) : RuleOrMeth, []))]
   := AddMeth
        (m := BaseMod [] [] [method1])
        (o := [])
@@ -529,7 +530,7 @@ Example rule1_substep
       (snd rule1)
       (* prove that the rule is defined by the module. *)
       (or_introl (eq_refl rule1))
-       (* prove that the rule body produces the given register writes, method calls, and return value (void). *)
+      (* prove that the rule body produces the given register writes, method calls, and return value (void). *)
       (ltac:(discharge_SemAction)
         : SemAction [register0_value] (snd rule1 type) [] 
             [rule1_reg_res] [] WO)
@@ -603,7 +604,7 @@ Example rule2_substep
   An example step in which a single rule named
   "rule0" is executed.
 
-  Note: this rule is simply a substep in which
+  Note: this step is simply a substep in which
   we've verified that the number of calls is less
   than the number of executions for each method.
 
@@ -847,6 +848,54 @@ Example module1_trace_incl_refl
                           (WeakInclusionRefl l0)
                           (fun n _ => (F n)))
                    labels)))).
+
+(**
+  What does it mean to say that a given module is correct?
+
+  The approach taken by Murali's work is to provide a Kami module that
+  implements the desired behavior in some transparently correct way
+  and to prove that the given module satisfies the trace inclusion
+  property w.r.t the produced canonical model.
+
+  Another approach is to define a set of properties that the given
+  module must satisfy and to demonstrate that the given module
+  satisfies these properties.
+
+  In the following example, we demonstrate this approach with
+  perhaps the simplest possible module and property.
+
+  Specifically, we demonstrate that the null module never modifies
+  its register states.
+*)
+Section correctnessExample.
+
+  Local Definition StepLabels := list FullLabel.
+
+  Local Definition TraceLabels := list StepLabels.
+
+  Local Definition actionUpdatesRegs (label : FullLabel) : bool
+    := emptyb (fst label).
+
+  Local Definition stepUpdatesRegs : StepLabels -> bool
+    := existsb actionUpdatesRegs.
+
+  Local Definition traceUpdatesRegs : TraceLabels -> bool
+    := existsb stepUpdatesRegs.
+
+  Local Definition correct (module : Mod)
+    := forall (initRegVals : RegsT) (trace : TraceLabels),
+         Trace module initRegVals trace ->
+         traceUpdatesRegs trace = false.
+
+  Theorem nullModCorrect : correct null_module.
+  Proof.
+  refine (
+    fun initRegVals trace H
+      => _
+  ).
+  
+
+End correctnessExample. 
 
 (**
   TODO: an example trace inclusion proof for two modules, [impl] and
